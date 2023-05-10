@@ -1,30 +1,33 @@
-ARG base
-FROM ${base}
+FROM gitpod/workspace-postgres
 
-# Dazzle does not rebuild a layer until one of its lines are changed. Increase this counter to rebuild this layer.
-ENV TRIGGER_REBUILD=3
-ENV PGWORKSPACE="/workspace/.pgsql"
-ENV PGDATA="$PGWORKSPACE/data"
+USER root
+# Setup Heroku CLI
+RUN curl https://cli-assets.heroku.com/install.sh | sh
 
-# Install PostgreSQL
-RUN sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' && \
-    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add - && \
-    sudo install-packages postgresql-12 postgresql-contrib-12
-
-# Setup PostgreSQL server for user gitpod
-ENV PATH="/usr/lib/postgresql/12/bin:$PATH"
-
-SHELL ["/usr/bin/bash", "-c"]
-RUN PGDATA="${PGDATA//\/workspace/$HOME}" \
- && mkdir -p ~/.pg_ctl/bin ~/.pg_ctl/sockets $PGDATA \
- && initdb -D $PGDATA \
- && printf '#!/bin/bash\npg_ctl -D $PGDATA -l ~/.pg_ctl/log -o "-k ~/.pg_ctl/sockets" start\n' > ~/.pg_ctl/bin/pg_start \
- && printf '#!/bin/bash\npg_ctl -D $PGDATA -l ~/.pg_ctl/log -o "-k ~/.pg_ctl/sockets" stop\n' > ~/.pg_ctl/bin/pg_stop \
- && chmod +x ~/.pg_ctl/bin/*
-ENV PATH="$HOME/.pg_ctl/bin:$PATH"
-ENV DATABASE_URL="postgresql://gitpod@localhost"
-ENV PGHOSTADDR="127.0.0.1"
-ENV PGDATABASE="postgres"
-COPY --chown=gitpod:gitpod postgresql-hook.bash $HOME/.bashrc.d/200-postgresql-launch
+# Setup Python linters
+RUN pip3 install flake8 flake8-flask flake8-django
 
 USER gitpod
+
+# Upgrade Node
+
+ENV NODE_VERSION=14.15.4
+RUN bash -c ". .nvm/nvm.sh && \
+        nvm install ${NODE_VERSION} && \
+        nvm alias default ${NODE_VERSION} && \
+        npm install -g yarn"
+
+RUN echo 'alias heroku_config=". $GITPOD_REPO_ROOT/.vscode/heroku_config.sh"' >> ~/.bashrc
+RUN echo 'alias run="python3 $GITPOD_REPO_ROOT/manage.py runserver 0.0.0.0:8000"' >> ~/.bashrc
+RUN echo 'alias python=python3' >> ~/.bashrc	
+RUN echo 'alias pip=pip3' >> ~/.bashrc	
+RUN echo 'alias font_fix="python3 $GITPOD_REPO_ROOT/.vscode/font_fix.py"' >> ~/.bashrc
+ENV PATH=/home/gitpod/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH
+
+# Local environment variables
+
+ENV PORT="8080"
+ENV IP="0.0.0.0"
+
+USER root
+# Switch back to root to allow IDE to load
